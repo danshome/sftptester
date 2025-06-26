@@ -50,6 +50,37 @@ def create_random_zip(destination: str, size: int) -> None:
             zf.write(data_path, arcname="data.bin")
 
 
+def _validate_private_key(config: SFTPConfig) -> bool:
+    """Attempt to load the private key to verify the passphrase works."""
+    if not config.ssh_private_key_path:
+        logging.warning("No private key path specified")
+        return False
+
+    loaders = [
+        paramiko.RSAKey.from_private_key_file,
+        paramiko.ECDSAKey.from_private_key_file,
+        paramiko.Ed25519Key.from_private_key_file,
+        paramiko.DSSKey.from_private_key_file,
+    ]
+
+    for loader in loaders:
+        try:
+            loader(config.ssh_private_key_path, password=config.ssh_private_key_passphrase)
+            logging.info("Successfully loaded private key with %s", loader.__qualname__)
+            return True
+        except FileNotFoundError:
+            logging.error("Private key file not found: %s", config.ssh_private_key_path)
+            return False
+        except paramiko.PasswordRequiredException:
+            logging.error("Private key is encrypted; passphrase missing or invalid")
+            return False
+        except paramiko.SSHException:
+            continue
+
+    logging.error("Unable to load the private key; unsupported format or bad passphrase")
+    return False
+
+
 def _create_client(config: SFTPConfig) -> paramiko.SSHClient:
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -173,6 +204,8 @@ def main():
     args = parser.parse_args()
 
     config = SFTPConfig.from_yaml(args.config)
+
+    _validate_private_key(config)
 
     report = run_tests(config)
     filename = f"sftp_report_{int(time.time())}.txt"
