@@ -1,6 +1,7 @@
 import argparse
 import os
 import random
+import stat
 import tempfile
 import time
 import zipfile
@@ -50,9 +51,23 @@ def create_random_zip(destination: str, size: int) -> None:
             zf.write(data_path, arcname="data.bin")
 
 
+def _validate_key_permissions(path: str) -> None:
+    """Raise PermissionError if private key permissions are too permissive."""
+    if os.name == "nt":
+        return  # permission model differs on Windows
+    mode = stat.S_IMODE(os.stat(path).st_mode)
+    if mode & 0o077:
+        raise PermissionError(
+            f"Private key file '{path}' has permissions {oct(mode)}; "
+            "it should not be accessible by group or others"
+        )
+
+
 def _create_client(config: SFTPConfig) -> paramiko.SSHClient:
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    if config.ssh_private_key_path:
+        _validate_key_permissions(config.ssh_private_key_path)
     client.connect(
         hostname=config.host,
         username=config.username,
