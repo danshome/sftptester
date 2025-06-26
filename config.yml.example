@@ -4,6 +4,7 @@ username: "sftpuserid"
 root_dir: "/"
 ssh_private_key_passphrase: "privatekeypassphrase"
 ssh_private_key_path: "/path/to/privatekey"
+# The private key file must not be accessible by group or others (chmod 600)
 min_test_file_size_bytes: 6000
 max_test_file_size_bytes: 64000000
 num_test_files: 1

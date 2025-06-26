@@ -12,6 +12,8 @@ collecting timing statistics for each file.
    ```
 2. Copy `config.yml.example` to `config.yml` and edit the values to match
    your SFTP server.
+   Ensure your private key file has restrictive permissions (e.g. `chmod 600`)
+   or the connection will fail.
 3. Run the tester:
    ```bash
    python sftp_tester.py --config config.yml
