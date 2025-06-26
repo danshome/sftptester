@@ -4,11 +4,13 @@ import random
 import tempfile
 import time
 import zipfile
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import List, Optional
 
 import paramiko
+from tqdm import tqdm
+import logging
 
 from sftp_config import SFTPConfig
 
@@ -66,6 +68,7 @@ def sftp_operation(
     local_path: str,
     remote_name: str,
     client: Optional[paramiko.SSHClient] = None,
+    position: int = 0,
 ) -> FileStat:
     file_size = os.path.getsize(local_path)
     if client is None:
@@ -80,14 +83,27 @@ def sftp_operation(
 
     sftp = client.open_sftp()
     start_transfer = time.monotonic()
+    pbar = tqdm(
+        total=file_size,
+        desc=f"Uploading {remote_name}",
+        unit="B",
+        unit_scale=True,
+        position=position,
+        leave=False,
+    )
+
+    def cb(transferred, total):
+        pbar.update(transferred - pbar.n)
+
     try:
-        sftp.put(local_path, os.path.join(config.root_dir, remote_name))
+        sftp.put(local_path, os.path.join(config.root_dir, remote_name), callback=cb)
         sftp.remove(os.path.join(config.root_dir, remote_name))
         success = True
         error = None
     except Exception as e:
         success = False
         error = str(e)
+    pbar.close()
     transfer_time = time.monotonic() - start_transfer
     sftp.close()
     if not config.keep_alive_enabled:
@@ -118,10 +134,17 @@ def run_tests(config: SFTPConfig) -> TestReport:
             for idx, (path, name) in enumerate(paths):
                 client = clients[idx % max_workers]
                 futures.append(
-                    executor.submit(sftp_operation, config, path, name, client)
+                    executor.submit(sftp_operation, config, path, name, client, idx)
                 )
-            for future in futures:
-                report.add(future.result())
+
+            progress = tqdm(total=len(futures), desc="Files uploaded", unit="file", position=max_workers)
+            for future in as_completed(futures):
+                stat = future.result()
+                report.add(stat)
+                progress.update(1)
+                if not stat.success:
+                    logging.error(f"Failed to transfer {stat.name}: {stat.error}")
+            progress.close()
 
         if config.keep_alive_enabled:
             for c in clients:
@@ -140,6 +163,7 @@ def save_report(report: TestReport, filename: str) -> None:
 
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
     parser = argparse.ArgumentParser(description="Run SFTP stress tests")
     parser.add_argument(
         "--config",
