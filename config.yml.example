@@ -1,0 +1,15 @@
+# Example configuration for sftp_tester
+host: "192.168.0.1"
+username: "sftpuserid"
+root_dir: "/"
+ssh_private_key_passphrase: "privatekeypassphrase"
+ssh_private_key_path: "/path/to/privatekey"
+min_test_file_size_bytes: 6000
+max_test_file_size_bytes: 64000000
+num_test_files: 1
+connect_timeout_seconds: 20
+transfer_timeout_seconds: 20
+sftp_threads: 1
+sftp_sleep_interval: -1
+keep_alive_enabled: 0
+retry_attempts: 0
